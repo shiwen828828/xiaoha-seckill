@@ -1,0 +1,24 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.zhuxiaoha</groupId>
+        <artifactId>xiaoha-seckill</artifactId>
+        <version>${revision}</version>
+    </parent>
+
+    <!-- 指定打包方式 -->
+    <packaging>jar</packaging>
+
+    <artifactId>xiaoha-seckill-user</artifactId>
+    <name>${artifactId}</name>
+    <description>用户模块，放置用户登录、注册、发送验证码等接口</description>
+
+    <dependencies>
+        <!-- 引入公共模块 -->
+        <dependency>
+            <groupId>com.zhuxiaoha</groupId>
+            <artifactId>xiaoha-seckill-common</artifactId>
+        </dependency>
+    </dependencies>
+</project>

@@ -4,6 +4,7 @@ import com.zhuxiaoha.seckill.common.utils.Response;
 import com.zhuxiaoha.seckill.user.model.vo.LoginUserReqVO;
 import com.zhuxiaoha.seckill.user.model.vo.LoginUserRspVO;
 import com.zhuxiaoha.seckill.user.model.vo.RegisterUserReqVO;
+import com.zhuxiaoha.seckill.user.model.vo.SendVerifyCodeReqVO;
 
 /**
  * 用户业务
@@ -24,4 +25,11 @@ public interface UserService {
      * @return
      */
     Response<LoginUserRspVO> login(LoginUserReqVO loginUserReqVO);
+
+    /**
+     * 发送验证码
+     * @param sendVerifyCodeReqVO
+     * @return
+     */
+    Response<?> sendVerifyCode(SendVerifyCodeReqVO sendVerifyCodeReqVO);
 }

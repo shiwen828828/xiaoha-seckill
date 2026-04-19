@@ -108,6 +108,13 @@
                 <version>${sa-token.version}</version>
             </dependency>
 
+            <!-- Sa-Token 整合 RedisTemplate -->
+            <dependency>
+                <groupId>cn.dev33</groupId>
+                <artifactId>sa-token-redis-template</artifactId>
+                <version>${sa-token.version}</version>
+            </dependency>
+
             <!-- Hutool 工具类库 -->
             <dependency>
                 <groupId>cn.hutool</groupId>

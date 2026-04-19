@@ -70,10 +70,7 @@ public class UserServiceImpl implements UserService {
         String verifyCode = registerUserReqVO.getVerifyCode();
 
         // 1. 校验验证码
-        // TODO: 验证码先写死 123456，后续开发验证码发送接口，再重构这里
-        if (!"123456".equals(verifyCode)) {
-            throw new BizException(ResponseCodeEnum.USER_VERIFY_CODE_ERROR);
-        }
+        checkVerifyCode(verifyCode, mobile, VerifyCodeTypeEnum.REGISTER.getPurpose());
 
         // 2. 校验手机号是否已注册
         Long existUserId = userDOMapper.selectIdByMobile(mobile);
@@ -122,7 +119,7 @@ public class UserServiceImpl implements UserService {
             checkPassword(loginUserReqVO.getPassword(), userDO.getPassword());
         } else {
             // 验证码登录：校验验证码是否正确
-            checkVerifyCode(loginUserReqVO.getVerifyCode());
+            checkVerifyCode(loginUserReqVO.getVerifyCode(), mobile, VerifyCodeTypeEnum.LOGIN.getPurpose());
         }
 
         // 4. 校验用户状态（是否被禁用）
@@ -227,21 +224,30 @@ public class UserServiceImpl implements UserService {
         }
     }
 
+
     /**
      * 校验验证码
      *
-     * @param verifyCode 验证码
+     * @param verifyCode
+     * @param mobile
+     * @param purpose
      */
-    private void checkVerifyCode(String verifyCode) {
+    private void checkVerifyCode(String verifyCode, String mobile, String purpose) {
         // 验证码不能为空
         if (StrUtil.isBlank(verifyCode)) {
             throw new BizException(ResponseCodeEnum.USER_VERIFY_CODE_ERROR);
         }
+        // 从 Redis 中获取对应手机号，对应场景的验证码
+        String redisKey = VERIFY_CODE_KEY_PREFIX + purpose + ":" + mobile;
+        Object storedCode = redisTemplate.opsForValue().get(redisKey);
 
-        // TODO: 验证码先写死 123456，后续开发验证码发送接口，再重构这里
-        if (!"123456".equals(verifyCode)) {
+        // 比对验证码是否正确
+        if (Objects.isNull(storedCode) || !verifyCode.equals(storedCode.toString())) {
             throw new BizException(ResponseCodeEnum.USER_VERIFY_CODE_ERROR);
         }
+
+        // 验证通过后，立即删除验证码（一次性使用，防止重复利用）
+        redisTemplate.delete(redisKey);
     }
 
     /**

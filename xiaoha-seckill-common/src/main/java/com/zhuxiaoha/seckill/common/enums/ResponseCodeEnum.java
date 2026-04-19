@@ -32,6 +32,8 @@ public enum ResponseCodeEnum implements BaseExceptionInterface {
 
     VERIFY_CODE_SEND_TOO_FREQUENT("20007", "验证码发送过于频繁，请稍后再试"),
 
+    VERIFY_CODE_DAILY_LIMIT_EXCEEDED("20008", "验证码每日发送次数已达上限，请明天再试"),
+
     ;
 
     // 异常码

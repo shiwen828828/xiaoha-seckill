@@ -34,6 +34,7 @@ public enum ResponseCodeEnum implements BaseExceptionInterface {
 
     VERIFY_CODE_DAILY_LIMIT_EXCEEDED("20008", "验证码每日发送次数已达上限，请明天再试"),
 
+    LOGIN_FAIL_TOO_MANY("20009", "密码错误次数过多，请 30 分钟后再试"),
     ;
 
     // 异常码

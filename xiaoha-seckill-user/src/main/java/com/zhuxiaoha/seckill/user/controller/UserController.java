@@ -55,5 +55,14 @@ public class UserController {
     public Response<?> sendVerifyCode(@Validated @RequestBody SendVerifyCodeReqVO sendVerifyCodeReqVO) {
         return userService.sendVerifyCode(sendVerifyCodeReqVO);
     }
+
+    /**
+     * 退出登录
+     */
+    @PostMapping("/logout")
+    @ApiOperationLog(description = "退出登录")
+    public Response<?> logout() {
+        return userService.logout();
+    }
 }
 

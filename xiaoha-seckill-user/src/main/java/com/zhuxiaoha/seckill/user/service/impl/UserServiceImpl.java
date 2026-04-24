@@ -150,6 +150,10 @@ public class UserServiceImpl implements UserService {
 
         // 2. 判断用户是否存在
         if (Objects.isNull(userDO)) {
+            // 密码登录：返回模糊错误提示
+            if (Objects.equals(type, LoginTypeEnum.PASSWORD.getCode())) {
+                throw new BizException(ResponseCodeEnum.USER_LOGIN_CREDENTIAL_ERROR);
+            }
             throw new BizException(ResponseCodeEnum.USER_MOBILE_NOT_REGISTERED);
         }
 
@@ -249,6 +253,27 @@ public class UserServiceImpl implements UserService {
         return Response.success();
     }
 
+    /**
+     * 退出登录
+     *
+     * @return
+     */
+    @Override
+    public Response<?> logout() {
+        // 获取当前请求中的 Token 值
+        String tokenValue = StpUtil.getTokenValue();
+        // 获取当前登录用户的 ID
+        Object userId = StpUtil.getLoginId();
+
+        // 调用 SaToken 的退出登录方法
+        // 此方法会自动从请求头中获取 Token，然后清除该 Token 对应的会话信息
+        StpUtil.logout();
+
+        log.info("==> 用户退出登录, userId: {}, token: {}", userId, tokenValue);
+
+        return Response.success();
+    }
+
 
     /**
      * 检查登录失败次数是否超限
@@ -315,7 +340,7 @@ public class UserServiceImpl implements UserService {
         if (StrUtil.isBlank(rawPassword)) {
             // 登录失败次数 +1
             addLoginFailCount(mobile);
-            throw new BizException(ResponseCodeEnum.USER_PASSWORD_ERROR);
+            throw new BizException(ResponseCodeEnum.USER_LOGIN_CREDENTIAL_ERROR); // 改为模糊提示
         }
 
         // 使用 BCrypt 校验明文密码和密文密码是否匹配
@@ -323,7 +348,7 @@ public class UserServiceImpl implements UserService {
         if (!matches) {
             // 登录失败次数 +1
             addLoginFailCount(mobile);
-            throw new BizException(ResponseCodeEnum.USER_PASSWORD_ERROR);
+            throw new BizException(ResponseCodeEnum.USER_LOGIN_CREDENTIAL_ERROR); // 改为模糊提示
         }
         // 密码校验成功，清除登录失败次数
         String failCountKey = LOGIN_FAIL_COUNT_KEY_PREFIX + mobile;

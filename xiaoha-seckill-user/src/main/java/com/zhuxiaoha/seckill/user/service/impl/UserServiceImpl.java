@@ -20,8 +20,8 @@ import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.data.redis.core.RedisOperations;
-import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.SessionCallback;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -50,7 +50,9 @@ public class UserServiceImpl implements UserService {
 
 
     @Resource
-    private RedisTemplate<String, Object> redisTemplate;
+//    private RedisTemplate<String, Object> redisTemplate;
+
+    private StringRedisTemplate stringRedisTemplate;
 
     @Resource(name = "bizExecutor")
     private Executor bizExecutor;
@@ -82,6 +84,10 @@ public class UserServiceImpl implements UserService {
      */
     private final DefaultRedisScript<Long> checkAndDeleteVerifyCodeScript;
 
+    /**
+     * 每日发送次数限制 Lua 脚本
+     */
+    private final DefaultRedisScript<Long> checkAndIncrementDailyLimitScript;
 
     // BCrypt 密码编码器
     private static final BCryptPasswordEncoder PASSWORD_ENCODER = new BCryptPasswordEncoder();
@@ -95,6 +101,11 @@ public class UserServiceImpl implements UserService {
         checkAndDeleteVerifyCodeScript.setLocation(new ClassPathResource("lua/check_and_delete_verify_code.lua"));
         // 指定脚本返回值类型
         checkAndDeleteVerifyCodeScript.setResultType(Long.class);
+
+        // 3. 每日发送次数限制 Lua 脚本
+        checkAndIncrementDailyLimitScript = new DefaultRedisScript<>();
+        checkAndIncrementDailyLimitScript.setLocation(new ClassPathResource("lua/check_and_increment_verify_code_daily_limit.lua"));
+        checkAndIncrementDailyLimitScript.setResultType(Long.class);
     }
 
 
@@ -208,26 +219,24 @@ public class UserServiceImpl implements UserService {
         // 发送频率限制：检查是否在 60 秒内重复发送
         String limitKey = VERIFY_CODE_LIMIT_KEY_PREFIX + verifyCodeType.getPurpose() + ":" + mobile;
 
-        if (redisTemplate.hasKey(limitKey)) {
+        // 如果 Key 已存在（60 秒内已发送过），返回 false；不存在则创建 Key 并返回 true
+        Boolean absent = stringRedisTemplate.opsForValue().setIfAbsent(limitKey, "1", VERIFY_CODE_LIMIT_SECONDS, TimeUnit.SECONDS);
+
+        if (Boolean.FALSE.equals(absent)) {
             throw new BizException(ResponseCodeEnum.VERIFY_CODE_SEND_TOO_FREQUENT);
         }
+
         // 每日发送次数限制：同一手机号、同一场景，每天最多发送 10 条
         String dailyLimitKey = VERIFY_CODE_DAILY_LIMIT_KEY_PREFIX + verifyCodeType.getPurpose() + ":" + mobile + ":" + LocalDate.now();
 
-        // 发送次数 +1
-        Long dailyCount = redisTemplate.opsForValue().increment(dailyLimitKey);
+        // 计算从当前时间，到第二天凌晨零点之间还剩下多少秒
+        long secondsUntilMidnight = Duration.between(LocalDateTime.now(), LocalDateTime.of(LocalDate.now().plusDays(1), LocalTime.MIDNIGHT)).getSeconds();
 
-        // 首次设置缓存时，计算到当天结束的剩余秒数，作为 Key 的 TTL 过期时间
-        if (Objects.nonNull(dailyCount) && dailyCount == 1) {
-            // 计算从当前时间，到第二天凌晨零点之间还剩下多少秒
-            long secondsUntilMidnight = Duration.between(LocalDateTime.now(), LocalDateTime.of(LocalDate.now().plusDays(1), LocalTime.MIDNIGHT)).getSeconds();
-
-            // 设置过期时间
-            redisTemplate.expire(dailyLimitKey, secondsUntilMidnight, TimeUnit.SECONDS);
-        }
+        // 执行 Lua 脚本：原子性地检查每日发送次数并累加
+        Long dailyCount = stringRedisTemplate.execute(checkAndIncrementDailyLimitScript, Collections.singletonList(dailyLimitKey), String.valueOf(VERIFY_CODE_DAILY_LIMIT), String.valueOf(secondsUntilMidnight));
 
         // 如果已经超过 10 条，抛出业务异常
-        if (Objects.nonNull(dailyCount) && dailyCount > VERIFY_CODE_DAILY_LIMIT) {
+        if (Objects.nonNull(dailyCount) && dailyCount == -1) {
             throw new BizException(ResponseCodeEnum.VERIFY_CODE_DAILY_LIMIT_EXCEEDED);
         }
 
@@ -236,16 +245,8 @@ public class UserServiceImpl implements UserService {
 
         // 通过 Pipeline 通道，批量写入 Redis（频率限制 Key + 验证码），减少网络往返，降低部分失败的风险
         String redisKey = VERIFY_CODE_KEY_PREFIX + verifyCodeType.getPurpose() + ":" + mobile;
-        redisTemplate.executePipelined(new SessionCallback<Void>() {
-            @Override
-            public Void execute(RedisOperations operations) {
-                // 先写频率限制 Key（60 秒 TTL）
-                operations.opsForValue().set(limitKey, "1", VERIFY_CODE_LIMIT_SECONDS, TimeUnit.SECONDS);
-                // 再写验证码 Key（5 分钟 TTL）
-                operations.opsForValue().set(redisKey, verifyCode, VERIFY_CODE_EXPIRE_MINUTES, TimeUnit.MINUTES);
-                return null;
-            }
-        });
+        // 缓存验证码（5 分钟 TTL）
+        stringRedisTemplate.opsForValue().set(redisKey, verifyCode, VERIFY_CODE_EXPIRE_MINUTES, TimeUnit.MINUTES);
 
         // 异步发送短信验证码
         bizExecutor.execute(() -> sendSms(mobile, verifyCode));
@@ -285,11 +286,15 @@ public class UserServiceImpl implements UserService {
         String failCountKey = LOGIN_FAIL_COUNT_KEY_PREFIX + mobile;
 
         // 查询 Redis 缓存中的计数
-        Integer failCount = (Integer) redisTemplate.opsForValue().get(failCountKey);
+        String failCountStr = stringRedisTemplate.opsForValue().get(failCountKey);
 
         // 判断登录失败次数是否超过上限
-        if (Objects.nonNull(failCount) && failCount >= LOGIN_FAIL_MAX_COUNT) {
-            throw new BizException(ResponseCodeEnum.LOGIN_FAIL_TOO_MANY);
+        // 判断登录失败次数是否超过上限
+        if (StrUtil.isNotBlank(failCountStr)) {
+            int failCount = Integer.parseInt(failCountStr);
+            if (failCount >= LOGIN_FAIL_MAX_COUNT) {
+                throw new BizException(ResponseCodeEnum.LOGIN_FAIL_TOO_MANY);
+            }
         }
     }
 
@@ -303,11 +308,11 @@ public class UserServiceImpl implements UserService {
         String failCountKey = LOGIN_FAIL_COUNT_KEY_PREFIX + mobile;
 
         // 查询 Redis 缓存中登录失败次数
-        Long failCount = redisTemplate.opsForValue().increment(failCountKey);
+        Long failCount = stringRedisTemplate.opsForValue().increment(failCountKey);
 
         // 如果是第一次添加缓存，需要设置过期时间（锁定窗口）
         if (Objects.nonNull(failCount) && failCount == 1) {
-            redisTemplate.expire(failCountKey, LOGIN_LOCK_MINUTES, TimeUnit.MINUTES);
+            stringRedisTemplate.expire(failCountKey, LOGIN_LOCK_MINUTES, TimeUnit.MINUTES);
         }
     }
 
@@ -352,7 +357,7 @@ public class UserServiceImpl implements UserService {
         }
         // 密码校验成功，清除登录失败次数
         String failCountKey = LOGIN_FAIL_COUNT_KEY_PREFIX + mobile;
-        redisTemplate.delete(failCountKey);
+        stringRedisTemplate.delete(failCountKey);
     }
 
 
@@ -373,7 +378,7 @@ public class UserServiceImpl implements UserService {
         String redisKey = VERIFY_CODE_KEY_PREFIX + purpose + ":" + mobile;
 
         // 执行 Lua 脚本：原子性地比对验证码并删除（匹配返回 1; 不匹配或 Key 不存在返回 0）
-        Long result = redisTemplate.execute(checkAndDeleteVerifyCodeScript, Collections.singletonList(redisKey), verifyCode);
+        Long result = stringRedisTemplate.execute(checkAndDeleteVerifyCodeScript, Collections.singletonList(redisKey), verifyCode);
 
         // 验证码错误或已过期
         if (result == null || result == 0) {

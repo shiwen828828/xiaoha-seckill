@@ -39,6 +39,8 @@ public enum ResponseCodeEnum implements BaseExceptionInterface {
     UNAUTHORIZED("20010", "未登录，请先登录"),
 
     USER_LOGIN_CREDENTIAL_ERROR("20011", "手机号或密码错误"),
+
+    CAPTCHA_VERIFICATION_FAILED("20012", "行为验证码校验失败，请重新验证"),
     ;
 
     // 异常码

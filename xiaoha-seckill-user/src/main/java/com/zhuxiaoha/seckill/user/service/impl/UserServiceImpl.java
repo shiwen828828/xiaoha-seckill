@@ -1,5 +1,7 @@
 package com.zhuxiaoha.seckill.user.service.impl;
 
+import cloud.tianai.captcha.application.ImageCaptchaApplication;
+import cloud.tianai.captcha.spring.plugins.secondary.SecondaryVerificationApplication;
 import cn.dev33.satoken.stp.StpUtil;
 import cn.hutool.core.util.RandomUtil;
 import cn.hutool.core.util.StrUtil;
@@ -19,8 +21,6 @@ import com.zhuxiaoha.seckill.user.service.UserService;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.ClassPathResource;
-import org.springframework.data.redis.core.RedisOperations;
-import org.springframework.data.redis.core.SessionCallback;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -56,6 +56,9 @@ public class UserServiceImpl implements UserService {
 
     @Resource(name = "bizExecutor")
     private Executor bizExecutor;
+
+    @Resource
+    private ImageCaptchaApplication imageCaptchaApplication;
 
     // Redis 中验证码的 Key 前缀
     private static final String VERIFY_CODE_KEY_PREFIX = "verify_code:";
@@ -209,6 +212,21 @@ public class UserServiceImpl implements UserService {
     public Response<?> sendVerifyCode(SendVerifyCodeReqVO sendVerifyCodeReqVO) {
         String mobile = sendVerifyCodeReqVO.getMobile();
         Integer type = sendVerifyCodeReqVO.getType();
+
+        // 行为验证码二次校验
+        String captchaId = sendVerifyCodeReqVO.getCaptchaId();
+        if (StrUtil.isBlank(captchaId)) {
+            throw new BizException(ResponseCodeEnum.CAPTCHA_VERIFICATION_FAILED);
+        }
+
+        // 判断 ImageCaptchaApplication 是否支持二次校验
+        boolean verified = false;
+        if (imageCaptchaApplication instanceof SecondaryVerificationApplication) {
+            verified = ((SecondaryVerificationApplication) imageCaptchaApplication).secondaryVerification(captchaId);
+        }
+        if (!verified) {
+            throw new BizException(ResponseCodeEnum.CAPTCHA_VERIFICATION_FAILED);
+        }
 
         // 判断验证码类型是否合法
         VerifyCodeTypeEnum verifyCodeType = VerifyCodeTypeEnum.valueOf(type);

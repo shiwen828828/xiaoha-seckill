@@ -41,6 +41,9 @@ public enum ResponseCodeEnum implements BaseExceptionInterface {
     USER_LOGIN_CREDENTIAL_ERROR("20011", "手机号或密码错误"),
 
     CAPTCHA_VERIFICATION_FAILED("20012", "行为验证码校验失败，请重新验证"),
+
+    // ----------- 秒杀商品模块异常状态码 -----------
+    SECKILL_ACTIVITY_NOT_EXIST("30001", "秒杀活动不存在"),
     ;
 
     // 异常码

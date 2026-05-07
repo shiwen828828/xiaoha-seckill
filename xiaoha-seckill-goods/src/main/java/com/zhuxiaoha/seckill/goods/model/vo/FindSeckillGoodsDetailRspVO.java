@@ -7,25 +7,24 @@ import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * @Author: 猪小哈
- * @Date: 2026-05-06
+ * @Date: 2026-05-07
  * @Version: v1.0.0
- * @Description: 查询秒杀商品列表出参
+ * @Description: 查询秒杀商品详情出参
  **/
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
 @Builder
-public class FindSeckillGoodsListRspVO {
-
-    private Long id;
+public class FindSeckillGoodsDetailRspVO {
 
     /**
-     * 商品原价
+     * 秒杀商品关联表 ID
      */
-    private BigDecimal goodsPrice;
+    private Long id;
 
     /**
      * 商品 ID
@@ -38,14 +37,24 @@ public class FindSeckillGoodsListRspVO {
     private Long activityId;
 
     /**
-     * 秒杀商品名称
+     * 商品名称
      */
-    private String seckillTitle;
+    private String goodsName;
 
     /**
-     * 秒杀商品图片
+     * 商品原价
      */
-    private String seckillImg;
+    private BigDecimal goodsPrice;
+
+    /**
+     * 商品轮播图列表
+     */
+    private List<String> goodsImgs;
+
+    /**
+     * 商品详情（HTML 内容）
+     */
+    private String goodsDetail;
 
     /**
      * 秒杀价
@@ -76,4 +85,9 @@ public class FindSeckillGoodsListRspVO {
      * 活动结束时间
      */
     private LocalDateTime endTime;
+
+    /**
+     * 商品详情 HTML
+     */
+    private String detailContent;
 }

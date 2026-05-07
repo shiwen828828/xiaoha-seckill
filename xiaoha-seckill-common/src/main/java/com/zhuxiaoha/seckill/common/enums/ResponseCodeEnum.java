@@ -44,6 +44,10 @@ public enum ResponseCodeEnum implements BaseExceptionInterface {
 
     // ----------- 秒杀商品模块异常状态码 -----------
     SECKILL_ACTIVITY_NOT_EXIST("30001", "秒杀活动不存在"),
+
+    // ----------- 秒杀商品模块异常状态码 -----------
+    // 省略...
+    SECKILL_GOODS_NOT_EXIST("30002", "秒杀商品不存在"),
     ;
 
     // 异常码

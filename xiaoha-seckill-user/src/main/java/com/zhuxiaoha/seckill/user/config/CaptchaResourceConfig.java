@@ -5,6 +5,7 @@ import cloud.tianai.captcha.resource.ResourceStore;
 import cloud.tianai.captcha.resource.common.model.dto.Resource;
 import cloud.tianai.captcha.resource.impl.LocalMemoryResourceStore;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 
 /**
  * @Author: 猪小哈
@@ -12,6 +13,7 @@ import org.springframework.context.annotation.Bean;
  * @Version: v1.0.0
  * @Description: 行为验证码资源配置类
  **/
+@Configuration
 public class CaptchaResourceConfig {
 
     @Bean

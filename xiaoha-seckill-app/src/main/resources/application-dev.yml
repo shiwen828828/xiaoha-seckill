@@ -51,7 +51,7 @@ spring:
 # MyBatis 开发环境专属配置
 mybatis:
   configuration:
-    # 开发阶段打印 SQL 语句，方便调试
+    # 开发阶段打印 SQL 语句，方便调试 上线前要关掉 否则严重影响性能
     log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
 
 

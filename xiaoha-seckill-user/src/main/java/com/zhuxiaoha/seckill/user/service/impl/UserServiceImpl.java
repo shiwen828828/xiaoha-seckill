@@ -261,7 +261,6 @@ public class UserServiceImpl implements UserService {
         // 生成 6 位随机数字验证码
         String verifyCode = RandomUtil.randomNumbers(6);
 
-        // 通过 Pipeline 通道，批量写入 Redis（频率限制 Key + 验证码），减少网络往返，降低部分失败的风险
         String redisKey = VERIFY_CODE_KEY_PREFIX + verifyCodeType.getPurpose() + ":" + mobile;
         // 缓存验证码（5 分钟 TTL）
         stringRedisTemplate.opsForValue().set(redisKey, verifyCode, VERIFY_CODE_EXPIRE_MINUTES, TimeUnit.MINUTES);

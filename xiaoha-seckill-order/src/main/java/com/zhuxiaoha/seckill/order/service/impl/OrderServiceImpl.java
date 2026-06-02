@@ -17,11 +17,11 @@ import com.zhuxiaoha.seckill.order.enums.OrderStatusEnum;
 import com.zhuxiaoha.seckill.order.model.vo.DoSeckillReqVO;
 import com.zhuxiaoha.seckill.order.model.vo.DoSeckillRspVO;
 import com.zhuxiaoha.seckill.order.service.OrderService;
+import com.zhuxiaoha.seckill.order.utils.OrderLockUtils;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDateTime;
@@ -52,6 +52,10 @@ public class OrderServiceImpl implements OrderService {
     @Resource
     private TransactionTemplate transactionTemplate;
 
+
+    @Resource
+    private OrderLockUtils orderLockUtils;
+
     /**
      * 秒杀下单
      *
@@ -70,6 +74,28 @@ public class OrderServiceImpl implements OrderService {
         long userId = StpUtil.getLoginIdAsLong();
         log.info("==> 当前登录用户 ID: {}", userId);
 
+        // 应用层锁：防止同一用户并发重复下单
+        // 构建锁 Key "userId:activityId:goodsId"
+        String lockKey = userId + ":" + activityId + ":" + goodsId;
+
+        // 尝试获取锁，获取失败，则说明该用户对该商品已经有请求在处理中
+        if (!orderLockUtils.tryLock(lockKey)) {
+            log.warn("==> 应用层锁拦截重复下单, userId: {}, activityId: {}, goodsId: {}", userId, activityId, goodsId);
+            throw new BizException(ResponseCodeEnum.SECKILL_ORDER_PROCESSING);
+        }
+
+        try {
+            return processSeckill(activityId, goodsId, userId);
+        } finally {
+            // 无论成功还是异常，都要释放锁
+            orderLockUtils.unlock(lockKey);
+        }
+    }
+
+    /**
+     * 秒杀下单核心逻辑
+     */
+    private Response<DoSeckillRspVO> processSeckill(Long activityId, Long goodsId, long userId) {
         // 2. 校验活动是否存在
         SeckillActivityDO activityDO = seckillActivityDOMapper.selectByPrimaryKey(activityId);
         if (Objects.isNull(activityDO)) {

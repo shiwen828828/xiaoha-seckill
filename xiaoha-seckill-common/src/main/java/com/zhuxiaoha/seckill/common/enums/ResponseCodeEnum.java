@@ -57,6 +57,8 @@ public enum ResponseCodeEnum implements BaseExceptionInterface {
     SECKILL_GOODS_SOLD_OUT("40003", "商品已售罄"),
 
     SECKILL_ORDER_DUPLICATE("40004", "您已参与过此商品的秒杀"),
+
+    SECKILL_ORDER_PROCESSING("40005", "您的订单正在处理中，请勿重复提交"),
     ;
 
     // 异常码

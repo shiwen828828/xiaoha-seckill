@@ -21,6 +21,7 @@ import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.Objects;
@@ -54,6 +55,7 @@ public class OrderServiceImpl implements OrderService {
      * @return
      */
     @Override
+    @Transactional
     public Response<DoSeckillRspVO> doSeckill(DoSeckillReqVO reqVO) {
         // 活动 ID
         Long activityId = reqVO.getActivityId();

@@ -54,7 +54,19 @@ public class JsonUtils {
      */
     @SneakyThrows
     public static <T> List<T> parseArray(String json, Class<T> clazz) {
-        return OBJECT_MAPPER.readValue(json,
-                OBJECT_MAPPER.getTypeFactory().constructCollectionType(List.class, clazz));
+        return OBJECT_MAPPER.readValue(json, OBJECT_MAPPER.getTypeFactory().constructCollectionType(List.class, clazz));
+    }
+
+    /**
+     * 将 JSON 字符串转换为指定类型的对象
+     *
+     * @param json
+     * @param clazz
+     * @param <T>
+     * @return
+     */
+    @SneakyThrows
+    public static <T> T parseObject(String json, Class<T> clazz) {
+        return OBJECT_MAPPER.readValue(json, clazz);
     }
 }

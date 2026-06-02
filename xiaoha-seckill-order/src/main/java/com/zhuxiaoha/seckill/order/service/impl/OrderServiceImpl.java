@@ -22,6 +22,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDateTime;
 import java.util.Objects;
@@ -48,6 +49,9 @@ public class OrderServiceImpl implements OrderService {
     @Resource
     private SeckillOrderDOMapper seckillOrderDOMapper;
 
+    @Resource
+    private TransactionTemplate transactionTemplate;
+
     /**
      * 秒杀下单
      *
@@ -55,7 +59,7 @@ public class OrderServiceImpl implements OrderService {
      * @return
      */
     @Override
-    @Transactional
+//    @Transactional  这个注解控制了整个方法 导致下单太慢 缩小事务粒度
     public Response<DoSeckillRspVO> doSeckill(DoSeckillReqVO reqVO) {
         // 活动 ID
         Long activityId = reqVO.getActivityId();
@@ -95,29 +99,34 @@ public class OrderServiceImpl implements OrderService {
             throw new BizException(ResponseCodeEnum.SECKILL_GOODS_SOLD_OUT);
         }
 
-        // 6. 扣减库存
-        int count = seckillGoodsDOMapper.deductStock(seckillGoodsDO.getId());
-        if (count == 0) {
-            throw new BizException(ResponseCodeEnum.SECKILL_GOODS_SOLD_OUT);
-        }
-
-        // 7. 查询商品信息，用于冗余到订单中
+        // 6. 查询商品信息，用于冗余到订单中
         GoodsDO goodsDO = goodsDOMapper.selectByPrimaryKey(goodsId);
-
-        // 8. 创建订单
         // 使用 Hutool 提供的工具方法，通过雪花算法生成订单号
         String orderNo = IdUtil.getSnowflakeNextIdStr();
         // 订单过期时间：当前时间 + 30 分钟
         LocalDateTime expireTime = now.plusMinutes(30);
 
-        SeckillOrderDO orderDO = SeckillOrderDO.builder().userId(userId).activityId(activityId).goodsId(goodsId).orderNo(orderNo).seckillPrice(seckillGoodsDO.getSeckillPrice()).goodsName(goodsDO.getGoodsName()).goodsImg(goodsDO.getGoodsImg()).status(OrderStatusEnum.PENDING_PAYMENT.getStatus()).expireTime(expireTime).isDeleted(0).createTime(LocalDateTime.now()).updateTime(LocalDateTime.now()).build();
+        // 编程式事务，精确控制事务边界
+        SeckillOrderDO orderDO = transactionTemplate.execute(status -> {
+            // 7. 扣减库存
+            int count = seckillGoodsDOMapper.deductStock(seckillGoodsDO.getId());
+            if (count == 0) {
+                throw new BizException(ResponseCodeEnum.SECKILL_GOODS_SOLD_OUT);
+            }
 
-        try {
-            seckillOrderDOMapper.insert(orderDO);
-        } catch (DuplicateKeyException e) {
-            log.warn("==> 重复下单, userId: {}, activityId: {}, goodsId: {}", userId, activityId, goodsId);
-            throw new BizException(ResponseCodeEnum.SECKILL_ORDER_DUPLICATE);
-        }
+            // 8. 创建订单
+            SeckillOrderDO order = SeckillOrderDO.builder().userId(userId).activityId(activityId).goodsId(goodsId).orderNo(orderNo).seckillPrice(seckillGoodsDO.getSeckillPrice()).goodsName(goodsDO.getGoodsName()).goodsImg(goodsDO.getGoodsImg()).status(OrderStatusEnum.PENDING_PAYMENT.getStatus()).expireTime(expireTime).isDeleted(0).createTime(LocalDateTime.now()).updateTime(LocalDateTime.now()).build();
+
+            try {
+                seckillOrderDOMapper.insert(order);
+            } catch (DuplicateKeyException e) {
+                log.warn("==> 重复下单, userId: {}, activityId: {}, goodsId: {}", userId, activityId, goodsId);
+                throw new BizException(ResponseCodeEnum.SECKILL_ORDER_DUPLICATE);
+            }
+
+            return order;
+        });
+
 
         log.info("==> 秒杀下单成功, orderId: {}, orderNo: {}", orderDO.getId(), orderNo);
 

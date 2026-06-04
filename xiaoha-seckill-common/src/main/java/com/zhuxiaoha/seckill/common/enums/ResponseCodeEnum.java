@@ -49,6 +49,9 @@ public enum ResponseCodeEnum implements BaseExceptionInterface {
     // 省略...
     SECKILL_GOODS_NOT_EXIST("30002", "秒杀商品不存在"),
 
+    SECKILL_ACTIVITY_GOODS_EMPTY("30003", "该活动下暂无秒杀商品"),
+
+
     // ----------- 秒杀订单模块异常状态码 -----------
     SECKILL_ACTIVITY_NOT_STARTED("40001", "秒杀活动未开始"),
 

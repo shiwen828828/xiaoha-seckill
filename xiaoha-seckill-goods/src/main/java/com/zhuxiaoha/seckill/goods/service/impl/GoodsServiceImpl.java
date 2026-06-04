@@ -75,6 +75,13 @@ public class GoodsServiceImpl implements GoodsService {
         if (StrUtil.isNotEmpty(redisJsonValue)) {
             log.info("==> 命中商品列表缓存, redisKey: {}", redisKey);
 
+            // 防止缓存穿透，判断缓存是否是 NULL
+            if (Objects.equals(RedisKeyConstants.NULL_CACHE_VALUE, redisJsonValue)) {
+                log.info("==> 命中空值缓存，活动不存在, redisKey: {}", redisKey);
+                throw new BizException(ResponseCodeEnum.SECKILL_ACTIVITY_NOT_EXIST);
+            }
+
+
             // 缓存命中
             // 手动将 String 字符串，反序列化为商品列表
             List<FindSeckillGoodsListRspVO> cachedList = JsonUtils.parseArray(redisJsonValue, FindSeckillGoodsListRspVO.class);
@@ -92,6 +99,9 @@ public class GoodsServiceImpl implements GoodsService {
         // 1. 查询活动信息
         SeckillActivityDO activityDO = seckillActivityDOMapper.selectByPrimaryKey(activityId);
         if (Objects.isNull(activityDO)) {
+            // 缓存空值，防止缓存穿透
+            cacheNullValue(redisKey);
+
             throw new BizException(ResponseCodeEnum.SECKILL_ACTIVITY_NOT_EXIST);
         }
 
@@ -179,6 +189,12 @@ public class GoodsServiceImpl implements GoodsService {
         if (StrUtil.isNotBlank(redisJsonValue)) {
             log.info("==> 命中商品详情缓存, redisKey: {}", redisKey);
 
+            // 防止缓存穿透，判断缓存是否是 NULL
+            if (Objects.equals(RedisKeyConstants.NULL_CACHE_VALUE, redisJsonValue)) {
+                log.info("==> 命中空值缓存，商品不存在, redisKey: {}", redisKey);
+                throw new BizException(ResponseCodeEnum.SECKILL_GOODS_NOT_EXIST);
+            }
+
             // 缓存命中
             // 手动将 String 字符串，反序列化为商品详情对象
             FindSeckillGoodsDetailRspVO cachedDetail = JsonUtils.parseObject(redisJsonValue, FindSeckillGoodsDetailRspVO.class);
@@ -200,12 +216,18 @@ public class GoodsServiceImpl implements GoodsService {
         // 1. 根据活动 ID 查询活动信息，校验活动是否存在
         SeckillActivityDO activityDO = seckillActivityDOMapper.selectByPrimaryKey(activityId);
         if (Objects.isNull(activityDO)) {
+            // 缓存空值，防止缓存穿透（攻击者用不存在的 activityId 反复请求）
+            cacheNullValue(redisKey);
+
             throw new BizException(ResponseCodeEnum.SECKILL_ACTIVITY_NOT_EXIST);
         }
 
         // 2. 根据活动 ID 和商品 ID 查询秒杀商品
         SeckillGoodsDO seckillGoodsDO = seckillGoodsDOMapper.selectByActivityIdAndGoodsId(activityId, goodsId);
         if (Objects.isNull(seckillGoodsDO)) {
+            // 缓存空值，防止缓存穿透（攻击者用不存在的 goodsId 反复请求）
+            cacheNullValue(redisKey);
+            
             throw new BizException(ResponseCodeEnum.SECKILL_GOODS_NOT_EXIST);
         }
 
@@ -412,5 +434,17 @@ public class GoodsServiceImpl implements GoodsService {
                 rspVO.setSeckillStock(stock);
             }
         }
+    }
+
+    /**
+     * 缓存空值，防止缓存穿透
+     *
+     * @param redisKey
+     */
+    private void cacheNullValue(String redisKey) {
+        // 当数据库中查不到数据时，往 Redis 写入一个空值标记，短时间内不再查 DB
+        stringRedisTemplate.opsForValue().set(redisKey, RedisKeyConstants.NULL_CACHE_VALUE, RedisKeyConstants.NULL_CACHE_TTL_MINUTES, TimeUnit.MINUTES);
+
+        log.info("==> 缓存空值，防止穿透, redisKey: {}, TTL: {}min", redisKey, RedisKeyConstants.NULL_CACHE_TTL_MINUTES);
     }
 }

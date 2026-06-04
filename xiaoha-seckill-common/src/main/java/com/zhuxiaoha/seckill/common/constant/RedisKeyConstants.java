@@ -49,6 +49,16 @@ public class RedisKeyConstants {
     public static final long SAFETY_BUFFER_SECONDS = 30 * 60; // 30 分钟
 
     /**
+     * 缓存空值，用于防止缓存穿透
+     */
+    public static final String NULL_CACHE_VALUE = "NULL";
+
+    /**
+     * 缓存空值的过期时间（单位：分钟）
+     */
+    public static final long NULL_CACHE_TTL_MINUTES = 5;
+
+    /**
      * 根据活动结束时间动态计算缓存 TTL（秒）
      * <p>
      * 公式：TTL = (活动结束时间 - 当前时间) + 安全缓冲时间

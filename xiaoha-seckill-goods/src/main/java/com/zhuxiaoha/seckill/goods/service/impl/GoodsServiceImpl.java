@@ -17,6 +17,8 @@ import com.zhuxiaoha.seckill.goods.model.vo.FindSeckillGoodsListRspVO;
 import com.zhuxiaoha.seckill.goods.service.GoodsService;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
+import org.redisson.api.RBloomFilter;
+import org.redisson.api.RedissonClient;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
@@ -53,6 +55,9 @@ public class GoodsServiceImpl implements GoodsService {
     @Resource
     private StringRedisTemplate stringRedisTemplate;
 
+    @Resource
+    private RedissonClient redissonClient;
+
     /**
      * 查询秒杀商品列表
      *
@@ -67,6 +72,15 @@ public class GoodsServiceImpl implements GoodsService {
 
         // 构建 Redis 缓存 Key
         String redisKey = RedisKeyConstants.GOODS_LIST_PREFIX + activityId;
+
+        // 第一道防线：布隆过滤器校验活动是否存在
+        // 如果布隆过滤器返回 "不存在"，绝对正确，说明该活动 ID 一定不合法，直接拒绝掉
+        RBloomFilter<Long> activityBloom = redissonClient.getBloomFilter(RedisKeyConstants.SECKILL_ACTIVITY_BLOOM_KEY);
+
+        if (activityBloom.isExists() && !activityBloom.contains(activityId)) {
+            log.info("==> 布隆过滤器拦截：活动不存在, activityId: {}", activityId);
+            throw new BizException(ResponseCodeEnum.SECKILL_ACTIVITY_NOT_EXIST);
+        }
 
         // 先查 Redis 缓存
         String redisJsonValue = stringRedisTemplate.opsForValue().get(redisKey);
@@ -182,6 +196,22 @@ public class GoodsServiceImpl implements GoodsService {
         // 构建 Redis 缓存 Key
         String redisKey = RedisKeyConstants.GOODS_DETAIL_PREFIX + activityId + ":" + goodsId;
 
+        // 第一道防线：布隆过滤器校验活动是否存在
+        RBloomFilter<Long> activityBloom = redissonClient.getBloomFilter(RedisKeyConstants.SECKILL_ACTIVITY_BLOOM_KEY);
+
+        if (activityBloom.isExists() && !activityBloom.contains(activityId)) {
+            log.info("==> 布隆过滤器拦截：活动不存在, activityId: {}", activityId);
+            throw new BizException(ResponseCodeEnum.SECKILL_ACTIVITY_NOT_EXIST);
+        }
+
+        // 第二道防线：布隆过滤器校验活动下的商品是否存在
+        RBloomFilter<String> goodsBloom = redissonClient.getBloomFilter(RedisKeyConstants.SECKILL_GOODS_BLOOM_KEY);
+
+        if (goodsBloom.isExists() && !goodsBloom.contains(activityId + ":" + goodsId)) {
+            log.info("==> 布隆过滤器拦截：商品不存在, activityId: {}, goodsId: {}", activityId, goodsId);
+            throw new BizException(ResponseCodeEnum.SECKILL_GOODS_NOT_EXIST);
+        }
+
         // 先查 Redis 缓存
         String redisJsonValue = stringRedisTemplate.opsForValue().get(redisKey);
 
@@ -227,7 +257,7 @@ public class GoodsServiceImpl implements GoodsService {
         if (Objects.isNull(seckillGoodsDO)) {
             // 缓存空值，防止缓存穿透（攻击者用不存在的 goodsId 反复请求）
             cacheNullValue(redisKey);
-            
+
             throw new BizException(ResponseCodeEnum.SECKILL_GOODS_NOT_EXIST);
         }
 
@@ -309,6 +339,25 @@ public class GoodsServiceImpl implements GoodsService {
             log.info("==> 预热跳过：活动下无商品, activityId: {}", activityId);
             throw new BizException(ResponseCodeEnum.SECKILL_ACTIVITY_GOODS_EMPTY);
         }
+
+        // 初始化活动布隆过滤器
+        RBloomFilter<Long> activityBloom = redissonClient.getBloomFilter(RedisKeyConstants.SECKILL_ACTIVITY_BLOOM_KEY);
+        // 预期插入一万个活动，误判率为 1%
+        activityBloom.tryInit(10000L, 0.01);
+        // 写入活动 ID
+        activityBloom.add(activityId);
+        log.info("==> 活动布隆过滤器写入成功, activityId: {}", activityId);
+
+        // 初始化商品布隆过滤器
+        RBloomFilter<String> goodsBloom = redissonClient.getBloomFilter(RedisKeyConstants.SECKILL_GOODS_BLOOM_KEY);
+        // 预期插入十万个商品，误判率为 1%
+        goodsBloom.tryInit(100000L, 0.01);
+        // 写入活动下所有商品
+        seckillGoodsDOS.forEach(seckillGoodsDO -> {
+            goodsBloom.add(activityId + ":" + seckillGoodsDO.getGoodsId());
+        });
+        log.info("==> 商品布隆过滤器写入成功, activityId: {}, 商品数: {}", activityId, seckillGoodsDOS.size());
+
 
         // 4. 批量查询商品原价
         List<Long> goodsIds = seckillGoodsDOS.stream().map(SeckillGoodsDO::getGoodsId).collect(Collectors.toList());

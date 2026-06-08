@@ -59,6 +59,17 @@ public class RedisKeyConstants {
     public static final long NULL_CACHE_TTL_MINUTES = 5;
 
     /**
+     * 活动布隆过滤器 Key
+     */
+    public static final String SECKILL_ACTIVITY_BLOOM_KEY = "seckill:bloom:activity";
+
+    /**
+     * 商品布隆过滤器 Key
+     */
+    public static final String SECKILL_GOODS_BLOOM_KEY = "seckill:bloom:goods";
+
+
+    /**
      * 根据活动结束时间动态计算缓存 TTL（秒）
      * <p>
      * 公式：TTL = (活动结束时间 - 当前时间) + 安全缓冲时间
